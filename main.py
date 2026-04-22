@@ -31,6 +31,7 @@ COOKIES = [
     cookie("RUR")
 ]
 
+
 def a_numero(raw: str) -> int:
     raw = raw.strip().lower()
     mult = 1
@@ -47,7 +48,6 @@ def a_numero(raw: str) -> int:
 
     raw = raw.strip()
 
-    # coma miles 4,636
     if "," in raw and "." not in raw:
         raw = raw.replace(",", "")
     else:
@@ -57,6 +57,7 @@ def a_numero(raw: str) -> int:
         return int(float(raw) * mult)
     except:
         return 0
+
 
 def parsear_meta(meta: str):
     likes = 0
@@ -80,20 +81,27 @@ def parsear_meta(meta: str):
         if "comment" in tipo or "coment" in tipo:
             comments = a_numero(numero)
 
-    # fecha
     m = re.search(r'el\s+(.+?)\s*:', meta)
     if m:
         fecha = m.group(1).strip()
 
-    # caption
     m = re.search(r'\d{4}:\s*"?(.+)', meta, re.DOTALL)
     if m:
         caption = m.group(1).strip().strip('"').strip()
 
     return likes, comments, fecha, caption
 
+
 def obtener_posts(page, max_posts=10):
-    page.wait_for_selector('a[href*="/p/"], a[href*="/reel/"]')
+
+    print("Buscando posts en el perfil")
+
+    try:
+        page.wait_for_selector('a[href*="/p/"], a[href*="/reel/"]', timeout=8000)
+    except:
+        print("No se encontraron posts")
+        print("URL actual:", page.url)
+        return []
 
     return page.evaluate(f"""
         () => {{
@@ -122,11 +130,29 @@ def obtener_posts(page, max_posts=10):
 
 
 def scrapear_post(page, link):
+
+    print("Abriendo:", link)
+
     page.goto(link, wait_until="domcontentloaded")
+
+    # detectar bloqueo
+    if "login" in page.url:
+        print("Instagram te envio a login")
+        raise Exception("bloqueado login")
+
+    html = page.content()
+
+    if "Try again later" in html:
+        print("Instagram bloqueo temporal")
+        raise Exception("bloqueo temporal")
 
     meta = page.locator(
         'meta[name="description"]'
     ).get_attribute("content")
+
+    if not meta:
+        print("No se encontro meta description")
+        print("URL:", page.url)
 
     likes, comments, fecha, caption = parsear_meta(meta or "")
 
@@ -142,6 +168,8 @@ def scrapear_post(page, link):
 
 with sync_playwright() as p:
 
+    print("Iniciando navegador")
+
     browser = p.chromium.launch(headless=False)
 
     context = browser.new_context(
@@ -151,28 +179,37 @@ with sync_playwright() as p:
 
     page = context.new_page()
 
-    # login cookies
+    print("Abriendo Instagram")
     page.goto("https://www.instagram.com/")
     page.wait_for_timeout(3000)
 
+    print("Cargando cookies")
     context.add_cookies(COOKIES)
 
     page.reload()
     page.wait_for_timeout(5000)
 
-    # abrir perfil
+    # verificar login
+    if "login" in page.url:
+        print("No se logro login con cookies")
+    else:
+        print("Login con cookies OK")
+
+    print("Abriendo perfil")
     page.goto(f"https://www.instagram.com/{INSTAGRAM_USER}/")
     page.wait_for_timeout(6000)
 
+    print("URL actual:", page.url)
+
     post_links = obtener_posts(page, MAX_POSTS)
 
-    print(f"Posts encontrados: {len(post_links)}")
+    print("Posts encontrados:", len(post_links))
 
     data = []
 
     for i, link in enumerate(post_links, 1):
 
-        print(f"[{i}/{len(post_links)}] {link}")
+        print(f"Procesando {i} de {len(post_links)}")
 
         try:
             post = scrapear_post(page, link)
@@ -180,18 +217,17 @@ with sync_playwright() as p:
             data.append(post)
 
             print(
-                f"  likes={post['likes']} | "
-                f"comentarios={post['comentarios']} | "
-                f"fecha={post['fecha']}"
+                "likes", post['likes'],
+                "comentarios", post['comentarios'],
+                "fecha", post['fecha']
             )
 
         except Exception as e:
-            print(f"Error: {e}")
+            print("Error:", e)
 
-    # guardar json
     with open("posts.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print("\nGuardado en posts.json")
+    print("Guardado en posts.json")
 
     browser.close()
