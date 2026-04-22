@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instagram Posts</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f5f5;
+      color: #111;
+      padding: 2rem;
+    }
+ 
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: .3rem;
+    }
+ 
+    .sub {
+      font-size: .8rem;
+      color: #888;
+      margin-bottom: 1.5rem;
+    }
+ 
+    /* Stats */
+    .stats {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+ 
+    .stat {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: .9rem 1.2rem;
+      min-width: 120px;
+    }
+ 
+    .stat-label {
+      font-size: .7rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: .3rem;
+    }
+ 
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+ 
+    /* Table */
+    .table-wrap {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+ 
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .85rem;
+    }
+ 
+    th {
+      text-align: left;
+      padding: .8rem 1rem;
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #999;
+      border-bottom: 1px solid #e0e0e0;
+    }
+ 
+    td {
+      padding: .75rem 1rem;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+ 
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+ 
+    .badge {
+      font-size: .65rem;
+      padding: .2rem .5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-reel { background: #f0e6ff; color: #7c3aed; }
+    .badge-post { background: #e6f7f0; color: #059669; }
+ 
+    .caption {
+      max-width: 260px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #555;
+    }
+ 
+    a { color: #2563eb; text-decoration: none; font-size: .75rem; }
+    a:hover { text-decoration: underline; }
+ 
+    .num { font-variant-numeric: tabular-nums; }
+ 
+    #error {
+      background: #fff3f3;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 1.5rem;
+      color: #b91c1c;
+      font-size: .85rem;
+      display: none;
+    }
+    #error code { background: #fee2e2; padding: .1rem .3rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+ 
+  <h1>📊 Instagram Posts</h1>
+  <p class="sub" id="sub">Cargando posts.json…</p>
+ 
+  <div id="error">
+    No se pudo cargar <code>posts.json</code>. Asegúrate de abrir esto con un servidor local:<br><br>
+    <code>python -m http.server 8080</code><br><br>
+    Luego entra a <code>http://localhost:8080</code>
+  </div>
+ 
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="stat-label">Posts</div><div class="stat-value" id="s-total">—</div></div>
+    <div class="stat"><div class="stat-label">Likes totales</div><div class="stat-value" id="s-likes">—</div></div>
+    <div class="stat"><div class="stat-label">Comentarios</div><div class="stat-value" id="s-comm">—</div></div>
+    <div class="stat"><div class="stat-label">Reels</div><div class="stat-value" id="s-reels">—</div></div>
+    <div class="stat"><div class="stat-label">Fotos</div><div class="stat-value" id="s-posts">—</div></div>
+  </div>
+ 
+  <div class="table-wrap" id="table-wrap" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Tipo</th>
+          <th>Fecha</th>
+          <th>Likes</th>
+          <th>Comentarios</th>
+          <th>Descripción</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+ 
+  <script>
+    function fmt(n) {
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+      return n.toLocaleString('es');
+    }
+ 
+    async function load() {
+      try {
+        const res = await fetch('posts.json');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        render(data);
+      } catch {
+        document.getElementById('sub').textContent = 'Error al cargar';
+        document.getElementById('error').style.display = 'block';
+      }
+    }
+ 
+    function render(data) {
+      const totalLikes = data.reduce((a, d) => a + (d.likes || 0), 0);
+      const totalComm  = data.reduce((a, d) => a + (d.comentarios || 0), 0);
+      const reels = data.filter(d => d.tipo === 'reel').length;
+      const posts = data.filter(d => d.tipo === 'post').length;
+ 
+      document.getElementById('s-total').textContent = data.length;
+      document.getElementById('s-likes').textContent = fmt(totalLikes);
+      document.getElementById('s-comm').textContent  = fmt(totalComm);
+      document.getElementById('s-reels').textContent = reels;
+      document.getElementById('s-posts').textContent = posts;
+ 
+      const user = data[0]?.link?.split('instagram.com/')[1]?.split('/')[0] || '';
+      document.getElementById('sub').textContent = user ? `@${user}` : `${data.length} publicaciones`;
+ 
+      const tbody = document.getElementById('tbody');
+      data.forEach((d, i) => {
+        const tr = document.createElement('tr');
+        const cap = (d.descripcion || '—').slice(0, 70);
+        const link = d.link.replace('https://www.instagram.com', '');
+        tr.innerHTML = `
+          <td class="num">${d.numero || i + 1}</td>
+          <td><span class="badge badge-${d.tipo}">${d.tipo}</span></td>
+          <td>${d.fecha || '—'}</td>
+          <td class="num">${fmt(d.likes || 0)}</td>
+          <td class="num">${fmt(d.comentarios || 0)}</td>
+          <td class="caption" title="${(d.descripcion||'').replace(/"/g,'')}">${cap}${(d.descripcion||'').length > 70 ? '…' : ''}</td>
+          <td><a href="${d.link}" target="_blank">Ver →</a></td>
+        `;
+        tbody.appendChild(tr);
+      });
+ 
+      document.getElementById('stats').style.display = '';
+      document.getElementById('table-wrap').style.display = '';
+    }
+ 
+    load();
+  </script>
+ 
+</body>
+</html>
